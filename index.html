@@ -1,0 +1,282 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>VSE Stock Trainer</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    body{font-family:system-ui,sans-serif;margin:0;background:#f5f7fb;color:#111}
+    header{background:#0f1724;color:white;padding:12px 20px;display:flex;justify-content:space-between;align-items:center}
+    header h1{margin:0;font-size:18px}
+    .container{padding:20px;max-width:1100px;margin:24px auto;background:white;border-radius:10px;box-shadow:0 6px 20px rgba(10,20,40,0.06)}
+    .hidden{display:none}
+    input,button{padding:10px;border-radius:6px;border:1px solid #cbd5e1;font-size:14px}
+    button{cursor:pointer;background:#0f1724;color:white;border:none}
+    .small{font-size:13px;color:#475569}
+    table{width:100%;border-collapse:collapse;margin-top:12px}
+    th,td{text-align:left;padding:8px;border-bottom:1px solid #f1f5f9}
+    .card{padding:12px;border-radius:8px;background:#fff;box-shadow:0 4px 10px rgba(15,23,42,0.04)}
+    .danger{color:#dc2626}
+  </style>
+</head>
+<body>
+<header>
+  <h1>VSE Stock Trainer</h1>
+</header>
+
+<main class="container">
+  <!-- Common Password -->
+  <section id="common-pass-view">
+    <h2>Enter Common Password</h2>
+    <input type="password" id="common-pass" placeholder="Common Password">
+    <button id="btn-common">Enter</button>
+    <p class="small">Password: vse2k25</p>
+    <p id="common-msg" class="small"></p>
+  </section>
+
+  <!-- Login -->
+  <section id="login-view" class="hidden">
+    <h2>Login / Signup</h2>
+    <input type="email" id="email" placeholder="Email">
+    <input type="password" id="password" placeholder="Password">
+    <div style="margin-top:8px">
+      <button id="btn-login">Login / Signup</button>
+      <button id="btn-guest" style="background:#334155">Guest</button>
+    </div>
+    <p class="small">Admin: admin6@vse.com / adminvse2k25</p>
+    <p id="login-msg" class="small"></p>
+  </section>
+
+  <!-- Dashboard -->
+  <section id="dashboard-view" class="hidden">
+    <h2>Dashboard</h2>
+    <p class="small">Logged in as: <span id="user-email"></span> <button id="btn-logout" style="background:#ef4444">Logout</button></p>
+
+    <div class="card">
+      <h3>Search Stock</h3>
+      <input id="search-input" placeholder="Type company symbol">
+      <button id="btn-search">Search</button>
+    </div>
+
+    <div id="stock-panel" class="card hidden" style="margin-top:12px">
+      <h3 id="stock-name"></h3>
+      <div id="tv-widget-wrap" style="height:420px;"></div>
+      <div style="margin-top:8px;">
+        <input id="qty" type="number" min="1" value="1" style="width:100px">
+        <button id="btn-buy">Buy</button>
+        <button id="btn-sell" style="background:#ef4444">Sell</button>
+        <span class="small">Price: <b id="live-price">-</b></span>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:12px">
+      <h3>Portfolio</h3>
+      <div class="small">Balance: <b id="balance">-</b></div>
+      <table id="portfolio-table">
+        <thead><tr><th>Symbol</th><th>Qty</th><th>Avg Price</th><th>Curr Price</th><th>Value</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+
+    <div id="admin-card" class="card hidden" style="margin-top:12px">
+      <h3>Admin Panel</h3>
+      <button id="btn-open-admin">Open Admin Panel</button>
+    </div>
+  </section>
+
+  <!-- Admin Panel -->
+  <section id="admin-view" class="hidden">
+    <h2>Admin Panel</h2>
+    <button id="btn-back-dashboard">Back</button>
+    <table id="admin-users-table">
+      <thead><tr><th>#</th><th>Email</th><th>Balance</th><th>Holdings</th><th>Total</th><th>Profit</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </section>
+</main>
+
+<script src="https://s3.tradingview.com/tv.js"></script>
+<script type="module">
+
+import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-app.js";
+import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-auth.js";
+import { getFirestore, doc, setDoc, getDoc, collection, getDocs } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore.js";
+
+// ---------------- Firebase Config ----------------
+const firebaseConfig = {
+  apiKey: "AIzaSyBFLVuBT-sSdcq-MjiL5tB17mfeNpP2jN8",
+  authDomain: "vsestocktrainer-a5b04.firebaseapp.com",
+  projectId: "vsestocktrainer-a5b04",
+  storageBucket: "vsestocktrainer-a5b04.firebasestorage.app",
+  messagingSenderId: "652083011735",
+  appId: "1:652083011735:web:3ab6396a3d5888abec49d2"
+};
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+
+// ---------------- Twelve Data API ----------------
+const TWELVE_API = "c933f15065e54a7b9d8908b084d72de1";
+const ADMIN_EMAIL = "admin6@vse.com";
+const ADMIN_PASSWORD = "adminvse2k25";
+
+// ---------------- UI ----------------
+const commonView = document.getElementById("common-pass-view");
+const loginView = document.getElementById("login-view");
+const dashboardView = document.getElementById("dashboard-view");
+const adminView = document.getElementById("admin-view");
+
+const btnCommon = document.getElementById("btn-common");
+const commonInput = document.getElementById("common-pass");
+const commonMsg = document.getElementById("common-msg");
+
+const emailEl = document.getElementById("email");
+const pwdEl = document.getElementById("password");
+const btnLogin = document.getElementById("btn-login");
+const btnGuest = document.getElementById("btn-guest");
+const loginMsg = document.getElementById("login-msg");
+
+const userEmail = document.getElementById("user-email");
+const btnLogout = document.getElementById("btn-logout");
+const balanceEl = document.getElementById("balance");
+const portfolioTableBody = document.querySelector("#portfolio-table tbody");
+
+const searchInput = document.getElementById("search-input");
+const btnSearch = document.getElementById("btn-search");
+const stockPanel = document.getElementById("stock-panel");
+const stockNameEl = document.getElementById("stock-name");
+const tvWidgetWrap = document.getElementById("tv-widget-wrap");
+const livePriceEl = document.getElementById("live-price");
+const qtyEl = document.getElementById("qty");
+const btnBuy = document.getElementById("btn-buy");
+const btnSell = document.getElementById("btn-sell");
+
+const adminCard = document.getElementById("admin-card");
+const btnOpenAdmin = document.getElementById("btn-open-admin");
+const btnBackAdmin = document.getElementById("btn-back-dashboard");
+const adminUsersTableBody = document.querySelector("#admin-users-table tbody");
+
+// ---------------- State ----------------
+let currentUser = null;
+let currentUserDoc = null;
+let selectedStock = null;
+
+// ---------------- Helpers ----------------
+function show(view){commonView.classList.add("hidden");loginView.classList.add("hidden");dashboardView.classList.add("hidden");adminView.classList.add("hidden");view.classList.remove("hidden");}
+function money(x){return '₹'+Number(x).toLocaleString("en-IN",{maximumFractionDigits:2});}
+async function ensureUserDoc(uid,email){const ref=doc(db,"users",uid);const snap=await getDoc(ref);if(!snap.exists()){const init={email,balance:50000,portfolio:{},trades:[],createdAt:Date.now()};await setDoc(ref,init);return init;}return snap.data();}
+async function fetchTwelvePrice(symbol){const res=await fetch(`https://api.twelvedata.com/price?symbol=${symbol}&apikey=${TWELVE_API}`);const data=await res.json();return data.price||0;}
+
+// ---------------- Common Password ----------------
+btnCommon.onclick=()=>{if(commonInput.value==="vse2k25"){show(loginView);}else{commonMsg.textContent="Wrong password"}}
+
+// ---------------- Auth ----------------
+btnLogin.onclick=async()=>{
+  const email=emailEl.value.trim(),pwd=pwdEl.value.trim();
+  if(!email||!pwd){loginMsg.textContent="Enter email & password";return;}
+  try{await signInWithEmailAndPassword(auth,email,pwd);}catch(e){
+    try{await createUserWithEmailAndPassword(auth,email,pwd);}catch(err){loginMsg.textContent=err.message;}
+  }
+}
+btnGuest.onclick=()=>{currentUser={uid:"guest",email:"Guest"};showDashboard();}
+
+// ---------------- Auth State ----------------
+onAuthStateChanged(auth,async user=>{
+  if(user){currentUser=user;currentUserDoc=await ensureUserDoc(user.uid,user.email);showDashboard();}
+});
+
+// ---------------- Dashboard ----------------
+btnLogout.onclick=()=>{signOut(auth);currentUser=null;show(loginView);};
+function showDashboard(){
+  userEmail.textContent=currentUser.email;
+  balanceEl.textContent=money(currentUserDoc.balance||0);
+  renderPortfolio();
+  if(currentUser.email===ADMIN_EMAIL)adminCard.classList.remove("hidden");else adminCard.classList.add("hidden");
+  show(dashboardView);
+}
+
+// ---------------- Portfolio ----------------
+function renderPortfolio(){
+  portfolioTableBody.innerHTML="";
+  if(!currentUserDoc.portfolio)return;
+  for(let sym in currentUserDoc.portfolio){
+    const p=currentUserDoc.portfolio[sym];
+    portfolioTableBody.innerHTML+=`<tr><td>${sym}</td><td>${p.qty}</td><td>${money(p.avgPrice)}</td><td>${money(p.currPrice||0)}</td><td>${money((p.currPrice||0)*p.qty)}</td></tr>`;
+  }
+}
+
+// ---------------- Search & TradingView ----------------
+btnSearch.onclick=async()=>{
+  const symbol=searchInput.value.trim().toUpperCase()+".BSE";
+  selectedStock=symbol;
+  const price=await fetchTwelvePrice(symbol);
+  livePriceEl.textContent=money(price);
+  stockNameEl.textContent=symbol;
+  stockPanel.classList.remove("hidden");
+  tvWidgetWrap.innerHTML="";
+  new TradingView.widget({
+    "container_id": "tv-widget-wrap",
+    "width": "100%",
+    "height": 400,
+    "symbol": symbol,
+    "interval": "D",
+    "timezone": "Asia/Kolkata",
+    "theme": "light",
+    "style": "1",
+    "locale": "en",
+    "toolbar_bg": "#f1f3f6",
+    "enable_publishing": false,
+    "allow_symbol_change": true,
+  });
+}
+
+// ---------------- Buy/Sell ----------------
+btnBuy.onclick=async()=>{
+  if(!selectedStock)return;
+  const qty=Number(qtyEl.value);
+  if(qty<=0)return;
+  const price=await fetchTwelvePrice(selectedStock);
+  if(currentUserDoc.balance<price*qty)return alert("Not enough balance");
+  currentUserDoc.balance-=price*qty;
+  if(!currentUserDoc.portfolio[selectedStock])currentUserDoc.portfolio[selectedStock]={qty:0,avgPrice:0};
+  const p=currentUserDoc.portfolio[selectedStock];
+  p.avgPrice=(p.avgPrice*p.qty+price*qty)/(p.qty+qty);
+  p.qty+=qty;
+  p.currPrice=price;
+  if(currentUser.uid!=="guest")await setDoc(doc(db,"users",currentUser.uid),currentUserDoc);
+  balanceEl.textContent=money(currentUserDoc.balance);
+  renderPortfolio();
+}
+btnSell.onclick=async()=>{
+  if(!selectedStock)return;
+  const qty=Number(qtyEl.value);
+  if(!currentUserDoc.portfolio[selectedStock]||currentUserDoc.portfolio[selectedStock].qty<qty)return alert("Not enough shares");
+  const price=await fetchTwelvePrice(selectedStock);
+  currentUserDoc.portfolio[selectedStock].qty-=qty;
+  currentUserDoc.balance+=price*qty;
+  if(currentUserDoc.portfolio[selectedStock].qty===0)delete currentUserDoc.portfolio[selectedStock];
+  if(currentUser.uid!=="guest")await setDoc(doc(db,"users",currentUser.uid),currentUserDoc);
+  balanceEl.textContent=money(currentUserDoc.balance);
+  renderPortfolio();
+}
+
+// ---------------- Admin ----------------
+btnOpenAdmin.onclick=async()=>{
+  adminUsersTableBody.innerHTML="";
+  const users=await getDocs(collection(db,"users"));
+  let i=1;
+  users.forEach(u=>{
+    const d=u.data();
+    let holdings=0,total=0;
+    for(let s in d.portfolio){holdings+=d.portfolio[s].qty*(d.portfolio[s].currPrice||0);}
+    total=d.balance+holdings;
+    const profit=total-50000;
+    adminUsersTableBody.innerHTML+=`<tr><td>${i++}</td><td>${d.email}</td><td>${money(d.balance)}</td><td>${money(holdings)}</td><td>${money(total)}</td><td class="${profit<0?'danger':''}">${money(profit)}</td></tr>`;
+  });
+  show(adminView);
+}
+document.getElementById("btn-back-dashboard").onclick=()=>{show(dashboardView);}
+
+</script>
+</body>
+</html>
